@@ -1,6 +1,9 @@
 package mutable
 
-import "fmt"
+import (
+	"fmt"
+	"errors"
+)
 
 var (
 	errCannotSetValue = func(field string, value interface{}) error {
@@ -9,4 +12,5 @@ var (
 	errCannotFind = func(field string) error {
 		return fmt.Errorf("cannot find suitable field (%s)", field)
 	}
+	errNotPointer = errors.New("given value is not a Pointer type")
 )
