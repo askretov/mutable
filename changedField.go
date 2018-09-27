@@ -7,11 +7,13 @@ import (
 )
 
 type ChangedFields map[string]ChangedField
+// TODO: Migrate to pointers
 
 type ChangedField struct {
-	Name     string      `json:"-"`
-	OldValue interface{} `json:"old_value"`
-	NewValue interface{} `json:"new_value"`
+	Name         string        `json:"-"`
+	OldValue     interface{}   `json:"old_value"`
+	NewValue     interface{}   `json:"new_value"`
+	NestedFields ChangedFields `json:"nested_fields,omitempty"`
 }
 
 // Contains reports whether a needle already exists within c

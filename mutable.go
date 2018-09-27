@@ -10,6 +10,15 @@ import (
 	"github.com/go-ext/logger"
 )
 
+// LevelSeparator is a value used as a separator of path levels through nested structs (eg. car/engine/gasType)
+var LevelSeparator = "/"
+
+type Mutabler interface {
+	ResetMutableState(interface{}) error
+	SetValue(string, string) error
+	AnalyzeChanges() ChangedFields
+}
+
 type Mutable struct {
 	// Original state of an object
 	originalState interface{} `json:"-"`
@@ -22,14 +31,17 @@ type Mutable struct {
 }
 
 const (
-	flagIgnore      = "ignore"
-	flagDeepAnalyze = "deep"
-	typeName        = "mutable.Mutable"
-	mutTagName      = "mutable"
-	levelSeparator  = "_"
+	flagIgnore         = "ignore"
+	flagDeepAnalyze    = "deep"
+	mutTypeName        = "mutable.Mutable"
+	mutFieldName       = "Mutable"
+	mutStatusFieldName = "MutableStatus"
+	mutTagName         = "mutable"
 )
 
-// ResetMutableState resets current mutable status of an object and updates previous state with given currentState
+// ResetMutableState resets current mutable status and updates previous state with given currentState
+// of m and all its nested mutable objects
+//
 func (m *Mutable) ResetMutableState(self interface{}) error {
 	if reflect.ValueOf(self).Kind() != reflect.Ptr {
 		return errNotPointer
@@ -45,71 +57,68 @@ func (m *Mutable) ResetMutableState(self interface{}) error {
 	m.originalState = reflect.ValueOf(self).Elem().Interface()
 	// Reset changed fields arrays
 	m.ChangedFields = ChangedFields{}
-
+	// Reset all nested mutable objects
+	reflectValue := reflect.ValueOf(m.target).Elem()
+	for i := 0; i < reflectValue.NumField(); i++ {
+		field := reflectValue.Field(i)
+		if field.Kind() == reflect.Ptr {
+			field = reflectValue.Field(i).Elem()
+		}
+		if !field.IsValid() || field.Kind() != reflect.Struct {
+			continue
+		}
+		if isMutable(field) && field.CanInterface() {
+			if err := field.Addr().Interface().(Mutabler).ResetMutableState(field.Addr().Interface()); err != nil {
+				logger.Error(err)
+				return errNestedResetError
+			}
+		}
+	}
 	return nil
 }
 
 // SetValue sets a value for given field by its name
 // JSON tag value will be used to find an appropriate field by its name
-func (m *Mutable) SetValue(fieldName, value string) (error, bool) {
-	// Try to find an appropriate field and set a new value
-	if err, success := trySetValueForObject(reflect.ValueOf(m.target).Elem(), "", fieldName, value); err != nil {
-		logger.Warning(err.Error())
-		return errCannotSetValue(fieldName, value), false
-	} else if !success {
-		// If we have neither errors nor success state, it means that we didn't find a field
-		return errCannotFind(fieldName), false
-	}
-	return nil, true
+// package var LevelSeparator value used as a separator for nested structs
+// 	(eg. car/engine) for struct like
+//	struct {
+//		Mutable
+//		Car struct {
+//			Engine string
+//		}
+//	}
+func (m *Mutable) SetValue(fieldName, value string) error {
+	// Try to set a value
+	return trySetValueForObject(reflect.ValueOf(m.target).Elem(), "", fieldName, value)
 }
 
-func trySetValueForObject(valueVar reflect.Value, currentContainerName, fieldJsonName, value string) (error, bool) {
-	// Check whether current object is mutable
-	var isMutableFlag = isMutable(valueVar)
+// trySetValueForObject tries to set a value to a destination field of given object
+func trySetValueForObject(object reflect.Value, levelPrefix, dstFieldName, value string) error {
 	// Iterate over struct fields
-	for z := 0; z < valueVar.NumField(); z++ {
-		// Get current field json name
-		currentFieldJsonName, _ := valueVar.Type().Field(z).Tag.Lookup("json")
-		currentFieldJsonName = currentContainerName + currentFieldJsonName
-		// Check whether a field has a container tag
-		containerTag, _ := valueVar.Type().Field(z).Tag.Lookup("container")
-		isContainer, _ := strconv.ParseBool(containerTag)
-
-		if isContainer {
-			// Go next level
-			// Check whether nested struct is mutable
-			var nestedStructIsMutable = isMutable(valueVar.Field(z))
-			// Try to set a value
-			if err, success := trySetValueForObject(valueVar.Field(z), currentFieldJsonName+"_", fieldJsonName, value); err != nil {
-				logger.Warning(err)
-				return errCannotSetValue(fieldJsonName, value), false
-			} else if success {
-				// Update mutable status
-				if !nestedStructIsMutable && isMutableFlag {
-					setMutableStatus(valueVar, Changed)
-				}
-				// Return success flag
-				return nil, true
+	for z := 0; z < object.NumField(); z++ {
+		field := object.Field(z)
+		if field.Kind() == reflect.Ptr {
+			// Get value the pointer points to
+			field = object.Field(z).Elem()
+		}
+		// Get current field's json name
+		fieldName, _ := object.Type().Field(z).Tag.Lookup("json")
+		if len(levelPrefix) > 0 {
+			// Prepend a level prefix
+			fieldName = levelPrefix + LevelSeparator + fieldName
+		}
+		if fieldName == dstFieldName {
+			if err := setValueForField(field, value); err != nil {
+				logger.Error(err)
+				return errCannotSetValue(fieldName, value)
 			}
-		} else {
-			// Check current field
-			if currentFieldJsonName == fieldJsonName {
-				// Try to set new value
-				if err := setValueForField(valueVar.Field(z), value); err != nil {
-					logger.Warning(err)
-					return errCannotSetValue(fieldJsonName, value), false
-				}
-				// Update mutable status
-				if isMutableFlag {
-					setMutableStatus(valueVar, Changed)
-				}
-				// Return success flag
-				return nil, true
-			}
+			return nil
+		} else if field.Kind() == reflect.Struct && strings.HasPrefix(dstFieldName, fieldName+LevelSeparator) {
+			// Go down recursively
+			return trySetValueForObject(field, fieldName, dstFieldName, value)
 		}
 	}
-
-	return nil, false
+	return errCannotFind(dstFieldName)
 }
 
 func setValueForField(dstField reflect.Value, value string) error {
@@ -172,9 +181,9 @@ func setValueForField(dstField reflect.Value, value string) error {
 // isMutable reports whether a value is a mutable object
 func isMutable(value reflect.Value) bool {
 	// Try to get a Mutable field by name
-	mf := value.FieldByName("Mutable")
-	if mf.IsValid() {
-		switch mf.Interface().(type) {
+	mutableField := value.FieldByName(mutFieldName)
+	if mutableField.IsValid() {
+		switch mutableField.Interface().(type) {
 		case Mutable:
 			return true
 		}
@@ -184,133 +193,150 @@ func isMutable(value reflect.Value) bool {
 
 // setMutableStatus sets a status for a given value
 func setMutableStatus(value reflect.Value, status Status) {
-	mf := value.FieldByName("Mutable")
+	mf := value.FieldByName(mutFieldName)
 	if mf.IsValid() {
-		mf.FieldByName("MutableStatus").Set(reflect.ValueOf(status))
+		mf.FieldByName(mutStatusFieldName).Set(reflect.ValueOf(status))
 	}
 }
 
-func appendChangedField(valueVar reflect.Value, changedFields ChangedFields) {
+// appendChangedFields appends changed fields to a given object
+func appendChangedFields(object reflect.Value, changedFields ChangedFields) {
 	// Iterate over struct fields
-	for z := 0; z < valueVar.NumField(); z++ {
-		switch valueVar.Field(z).Interface().(type) {
+	for z := 0; z < object.NumField(); z++ {
+		switch object.Field(z).Interface().(type) {
 		case Mutable:
-			// Get current value
-			currentContainer := valueVar.Field(z).Interface().(Mutable).ChangedFields
-			// Append fields names to the current container
-			for _, field := range changedFields {
-				// Append a new value
-				if !currentContainer.Contains(&field) {
-					// Check currentContainer for nil
-					if currentContainer == nil {
-						currentContainer = ChangedFields{}
-					}
-					currentContainer[field.Name] = field
-				}
+			dst := object.Field(z).Interface().(Mutable).ChangedFields
+			// Check dst for nil
+			if dst == nil {
+				dst = ChangedFields{}
 			}
-			// Set updated value back to the object
-			valueVar.Field(z).FieldByName("ChangedFields").Set(reflect.ValueOf(currentContainer))
-
+			for _, field := range changedFields {
+				dst[field.Name] = field
+			}
 			return
 		}
 	}
 }
 
-// parseStructTag parses a struct tag field into map of tags
-func parseStructTag(tag string) map[string]string {
-	tags := map[string]string{}
-	// Split tags string
-	fields := strings.Fields(tag)
-	for _, field := range fields {
-		// Split every tag to key and value
-		splitField := strings.Split(field, ":")
-		if len(splitField) > 1 {
-			// Add a tag data
-			tags[splitField[0]] = strings.Replace(splitField[1], "\"", "", -1)
-		}
-	}
-	return tags
-}
-
 // AnalyzeChanges analyzes changes of a target object and returns changed fields data
 func (m *Mutable) AnalyzeChanges() ChangedFields {
-	_, changes := tryAnalyzeChanges(reflect.ValueOf(m.target).Elem(), reflect.ValueOf(m.originalState), "")
-	return changes
+	return tryAnalyzeChanges(reflect.ValueOf(m.target).Elem(), reflect.ValueOf(m.originalState))
 }
 
-func tryAnalyzeChanges(currentValue, originalValue reflect.Value, currentLevelName string) (result bool, changedFields ChangedFields) {
-	// TODO: Remove result, use just changedFields
+// tryAnalyzeChanges analyzes changes of a target object and returns changed fields data
+func tryAnalyzeChanges(currentValue, originalValue reflect.Value) (changedFields ChangedFields) {
 	changedFields = ChangedFields{}
-	// Check whether current object is mutable
-	var isCurrentMutable = isMutable(currentValue)
 	// Iterate over struct fields
 	for z := 0; z < currentValue.NumField(); z++ {
+		// Get current and original fields
 		currentField := currentValue.Field(z)
 		originalField := originalValue.Field(z)
 		if currentField.Kind() == reflect.Ptr {
+			// Get value the pointer points to
 			currentField = currentValue.Field(z).Elem()
 			originalField = originalValue.Field(z).Elem()
 		}
-
 		// Get current field metadata
 		currentFieldMeta := currentValue.Type().Field(z)
-		logger.Debugf("currentFieldName: %v, [%s]", currentFieldMeta.Name, currentFieldMeta.Type.String()) // TODO: DELETEME
 		tagValue, _ := currentFieldMeta.Tag.Lookup(mutTagName)
-
-		// Check field for ignored flag
+		// Check the field for ignored flag
 		ignored := strings.Contains(tagValue, flagIgnore)
-		if !currentField.IsValid() || currentFieldMeta.Type.String() == typeName || ignored { // TODO: test this part and move to == instead of contains
+		// Check ignored fields and Mutable field itself
+		if currentFieldMeta.Type.String() == mutTypeName || ignored { // TODO: test ignored
 			// Pass through for Mutable itself and ignored fields
 			continue
 		}
-		// Get current field name
-		currentFieldName := currentLevelName + currentFieldMeta.Name
 		// Check whether a field has deep analyze flag
-		isDeepAnalyze := strings.Contains(tagValue, flagDeepAnalyze)
-		if isDeepAnalyze && currentField.Kind() == reflect.Struct {
-			// Check whether a nested struct is mutable
-			nestedStructIsMutable := isMutable(currentField)
-			// Analyze nested struct
-			if changed, fields := tryAnalyzeChanges(currentField, originalField, currentFieldName+levelSeparator); changed {
-				// Update mutable status
-				if !nestedStructIsMutable && isCurrentMutable {
-					setMutableStatus(currentValue, Changed)
-					appendChangedField(currentValue, fields)
-				}
-				// Set true for result
-				result = true
-			}
-		} else if currentField.CanInterface() {
-			logger.Debugf("%v vs %v", currentField.Interface(), originalField.Interface())
-			// Check current field
-			var equals bool
-			if _, ok := currentField.Interface().(Equaler); ok {
-				// Compare with type's Equal method
-				equals = currentField.Interface().(Equaler).Equal(originalField.Interface())
-			} else {
-				// Compare with reflect's DeepEqual
-				equals = reflect.DeepEqual(currentField.Interface(), originalField.Interface())
-			}
-			if !equals {
-				// Prepare ChangedField
-				changesData := ChangedField{
-					Name:     currentFieldName,
-					OldValue: originalField.Interface(),
-					NewValue: currentField.Interface(),
-				}
+		isDeepAnalyze := strings.Contains(tagValue, flagDeepAnalyze) && currentField.Kind() == reflect.Struct
 
-				// Update mutable status
-				if isCurrentMutable {
-					setMutableStatus(currentValue, Changed)
-					appendChangedField(currentValue, ChangedFields{changesData.Name: changesData})
+		// Analyze the field changes
+		switch {
+		case !currentField.IsValid() || !originalField.IsValid():
+			// Current or original field is not valid
+			if cf := analyzeNotValid(currentFieldMeta.Name, currentField, originalField); cf != nil {
+				changedFields[cf.Name] = *cf
+			}
+		case isDeepAnalyze:
+			// Deep analyze case
+			if nestedChangedFields := analyzeDeep(currentField, originalField); len(nestedChangedFields) > 0 {
+				changedFields[currentFieldMeta.Name] = ChangedField{
+					Name:         currentFieldMeta.Name,
+					NestedFields: nestedChangedFields,
 				}
-				// Set changed flag
-				result = true
-				// Append changed fields
-				changedFields[changesData.Name] = changesData
+			}
+		default:
+			// Regular analyze case (simple value field)
+			if cf := analyzeRegular(currentFieldMeta.Name, currentField, originalField); cf != nil {
+				changedFields[cf.Name] = *cf
 			}
 		}
-	}
 
-	return result, changedFields
+	}
+	// Set changed fields data to the current object
+	if len(changedFields) > 0 {
+		if isMutable(currentValue) {
+			appendChangedFields(currentValue, changedFields)
+		}
+	}
+	return changedFields
+}
+
+// analyzeNotValid analyzes a case when current or original value is not valid
+func analyzeNotValid(fieldName string, current, original reflect.Value) *ChangedField {
+	switch {
+	case !current.IsValid() && !original.IsValid():
+		// Nothing changed, both values are not valid
+	case !current.IsValid() && original.IsValid():
+		// Current is not valid
+		return &ChangedField{
+			Name:     fieldName,
+			OldValue: original.Interface(),
+			NewValue: nil,
+		}
+	case !original.IsValid() && current.IsValid():
+		// Original is not valid
+		return &ChangedField{
+			Name:     fieldName,
+			OldValue: nil,
+			NewValue: current.Interface(),
+		}
+	}
+	return nil
+}
+
+// analyzeDeep returns changed fields of deep analyze logic
+// Deep analyze logic is the analyze of every field changes of underlying struct (used only for struct values)
+func analyzeDeep(current, original reflect.Value) (changedFields ChangedFields) {
+	// Check whether a nested struct is mutable
+	isNestedStructMutable := isMutable(current)
+	// Analyze nested struct
+	if isNestedStructMutable {
+		// Analyze with nested object's own mutable logic
+		changedFields = current.Addr().Interface().(Mutabler).AnalyzeChanges()
+	} else {
+		// Analyze as non-mutable struct
+		changedFields = tryAnalyzeChanges(current, original)
+	}
+	return changedFields
+}
+
+// analyzeRegular returns changed fields of regular analyze
+// Regular analyze logic is the direct comparison of current and original values
+func analyzeRegular(fieldName string, current, original reflect.Value) *ChangedField {
+	var equals bool
+	if _, ok := current.Interface().(Equaler); ok {
+		// Compare with type's Equal method
+		equals = current.Interface().(Equaler).Equal(original.Interface())
+	} else {
+		// Compare with reflect's DeepEqual
+		equals = reflect.DeepEqual(current.Interface(), original.Interface())
+	}
+	if !equals {
+		return &ChangedField{
+			Name:     fieldName,
+			OldValue: original.Interface(),
+			NewValue: current.Interface(),
+		}
+	}
+	return nil
 }
