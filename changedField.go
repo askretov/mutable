@@ -7,6 +7,7 @@ import (
 )
 
 type ChangedFields map[string]ChangedField
+
 // TODO: Migrate to pointers
 
 type ChangedField struct {
@@ -18,52 +19,34 @@ type ChangedField struct {
 
 // Contains reports whether a needle already exists within c
 func (c ChangedFields) Contains(needle *ChangedField) bool {
-
-	if _, exists := c[needle.Name]; exists {
-		return true
-	}
-
-	return false
+	_, exists := c[needle.Name]
+	return exists
 }
 
 // ContainsByFieldName reports whether a data for given field name exists within c
 func (c ChangedFields) ContainsByFieldName(fieldName string) bool {
-
-	if _, exists := c[fieldName]; exists {
-		return true
-	}
-
-	return false
+	_, exists := c[fieldName]
+	return exists
 }
 
-// FieldNames returns an array of changed field names
-func (c ChangedFields) FieldNames() []string {
-
-	var result = []string{}
-
+// Keys returns an array of changed field names
+func (c ChangedFields) Keys() []string {
+	var result = make([]string, 0, len(c))
 	for _, field := range c {
 		result = append(result, field.Name)
 	}
-
 	return result
 }
 
 // GetFieldByName returns ChangedField object by field name
 func (c ChangedFields) GetFieldByName(fieldName string) ChangedField {
-
-	if _, exists := c[fieldName]; exists {
-		return c[fieldName]
-	}
-
-	return ChangedField{}
+	return c[fieldName]
 }
 
 // JSON serializes c
 func (c ChangedFields) JSON(pretty bool) []byte {
-
 	var result []byte
 	var err error
-
 	// Serialize an event
 	if pretty {
 		result, err = json.MarshalIndent(c, "", "\t")

@@ -1,13 +1,12 @@
 package mutable
 
 import (
+	"encoding/json"
 	"reflect"
-	"strconv"
 	"strings"
-	"time"
 
-	"github.com/go-ext/helpers"
 	"github.com/go-ext/logger"
+	"github.com/pquerna/ffjson/ffjson"
 )
 
 // LevelSeparator is a value used as a separator of path levels through nested structs (eg. car/engine/gasType)
@@ -15,7 +14,7 @@ var LevelSeparator = "/"
 
 type Mutabler interface {
 	ResetMutableState(interface{}) error
-	SetValue(string, string) error
+	SetValue(string, interface{}) error
 	AnalyzeChanges() ChangedFields
 }
 
@@ -41,7 +40,6 @@ const (
 
 // ResetMutableState resets current mutable status and updates previous state with given currentState
 // of m and all its nested mutable objects
-//
 func (m *Mutable) ResetMutableState(self interface{}) error {
 	if reflect.ValueOf(self).Kind() != reflect.Ptr {
 		return errNotPointer
@@ -87,13 +85,18 @@ func (m *Mutable) ResetMutableState(self interface{}) error {
 //			Engine string
 //		}
 //	}
-func (m *Mutable) SetValue(fieldName, value string) error {
+func (m *Mutable) SetValue(fieldName string, value interface{}) error {
 	// Try to set a value
-	return trySetValueForObject(reflect.ValueOf(m.target).Elem(), "", fieldName, value)
+	return trySetValueToObject(reflect.ValueOf(m.target).Elem(), "", fieldName, value)
 }
 
-// trySetValueForObject tries to set a value to a destination field of given object
-func trySetValueForObject(object reflect.Value, levelPrefix, dstFieldName, value string) error {
+// AnalyzeChanges analyzes changes of a target object and returns changed fields data
+func (m *Mutable) AnalyzeChanges() ChangedFields {
+	return tryAnalyzeChanges(reflect.ValueOf(m.target).Elem(), reflect.ValueOf(m.originalState))
+}
+
+// trySetValueToObject tries to set a value to a destination field of given object
+func trySetValueToObject(object reflect.Value, levelPrefix, dstFieldName string, value interface{}) error {
 	// Iterate over struct fields
 	for z := 0; z < object.NumField(); z++ {
 		field := object.Field(z)
@@ -108,74 +111,66 @@ func trySetValueForObject(object reflect.Value, levelPrefix, dstFieldName, value
 			fieldName = levelPrefix + LevelSeparator + fieldName
 		}
 		if fieldName == dstFieldName {
-			if err := setValueForField(field, value); err != nil {
-				logger.Error(err)
+			if err := trySetValueToField(field, value); err != nil {
+				logger.Errorf("Error: %s, Field: %s", err, fieldName)
 				return errCannotSetValue(fieldName, value)
 			}
 			return nil
 		} else if field.Kind() == reflect.Struct && strings.HasPrefix(dstFieldName, fieldName+LevelSeparator) {
 			// Go down recursively
-			return trySetValueForObject(field, fieldName, dstFieldName, value)
+			return trySetValueToObject(field, fieldName, dstFieldName, value)
 		}
 	}
 	return errCannotFind(dstFieldName)
 }
 
-func setValueForField(dstField reflect.Value, value string) error {
-	switch fieldType := dstField.Interface().(type) {
-	case string:
-		dstField.SetString(value)
-	case float64:
-		val, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		dstField.SetFloat(val)
-	case int, int64:
-		val, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return err
-		}
-		dstField.SetInt(val)
-	case uint, uint64:
-		val, err := strconv.ParseUint(value, 10, 64)
-		if err != nil {
-			return err
-		}
-		dstField.SetUint(val)
-	case bool:
-		val, err := strconv.ParseBool(value)
-		if err != nil {
-			return err
-		}
-		dstField.SetBool(val)
-	case time.Time:
-		// Try to parse time
-		var layout = "2006-01-02"
-		if len(value) > 10 {
-			layout = "2006-01-02 15:04:05"
-		}
-		val, err := time.Parse(layout, value)
-		if err != nil {
-			// Try to parse and Unix timestamp
-			intVal, err := strconv.ParseInt(value, 10, 64)
-			if err != nil {
-				return err
-			}
-			val = time.Unix(intVal, 0)
-		}
-		dstField.Set(reflect.ValueOf(val))
-	case []int64:
-		val := helper.SplitStringToInt64(value, ",", true)
-		dstField.Set(reflect.ValueOf(val))
-	case []string:
-		val := helper.SplitString(value, ",", true)
-		dstField.Set(reflect.ValueOf(val))
-	default:
-		logger.Error("not implemented field type: %T", fieldType)
+// trySetValueToField sets the value to the given field
+func trySetValueToField(field reflect.Value, value interface{}) error {
+	if !field.CanSet() {
+		return errCannotSet
 	}
-
+	if !field.CanInterface() {
+		return errCannotInterface
+	}
+	var fieldType = reflect.TypeOf(field.Interface())
+	if fieldType == reflect.TypeOf(value) {
+		// Set a value
+		field.Set(reflect.ValueOf(value))
+	} else {
+		var srcValue []byte
+		switch value.(type) {
+		case string:
+			srcValue = []byte(value.(string))
+		case []byte:
+			// Try to parse a []byte value into destination type
+			srcValue = value.([]byte)
+		default:
+			// Unsupported type
+			return errUnsupportedType
+		}
+		// Try to parse a string value into destination type
+		parsedValue, err := parseValue(srcValue, fieldType)
+		if err != nil {
+			logger.Error(err)
+			return errCannotParse
+		}
+		// Set a parsed value
+		field.Set(reflect.ValueOf(parsedValue))
+	}
 	return nil
+}
+
+// parseValue returns a value parsed into destination type dstType
+// Value should be a valid JSON value
+func parseValue(value []byte, dstType reflect.Type) (interface{}, error) {
+	if json.Valid(value) {
+		dstValue := reflect.New(dstType)
+		if err := ffjson.Unmarshal(value, dstValue.Interface()); err != nil {
+			return nil, err
+		}
+		return dstValue.Elem().Interface(), nil
+	}
+	return nil, errNotJSON
 }
 
 // isMutable reports whether a value is a mutable object
@@ -216,11 +211,6 @@ func appendChangedFields(object reflect.Value, changedFields ChangedFields) {
 			return
 		}
 	}
-}
-
-// AnalyzeChanges analyzes changes of a target object and returns changed fields data
-func (m *Mutable) AnalyzeChanges() ChangedFields {
-	return tryAnalyzeChanges(reflect.ValueOf(m.target).Elem(), reflect.ValueOf(m.originalState))
 }
 
 // tryAnalyzeChanges analyzes changes of a target object and returns changed fields data

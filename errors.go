@@ -8,13 +8,18 @@ import (
 
 var (
 	errCannotSetValue = func(field string, value interface{}) error {
-		return fmt.Errorf("cannot set value (%s) for the field (%s)", value, field)
+		return fmt.Errorf("cannot set value (%s) to the field (%s)", value, field)
 	}
 	errCannotFind = func(field string) error {
 		return fmt.Errorf("cannot find a destination field (%s)", field)
 	}
 	errNotPointer       = errors.New("given value is not a Pointer type")
 	errNestedResetError = errors.New("cannot reset nested mutable object")
+	errCannotSet        = errors.New("field cannot Set")
+	errCannotInterface  = errors.New("field cannot Interface")
+	errCannotParse      = errors.New("cannot parse value")
+	errUnsupportedType  = errors.New("unsupported value type")
+	errNotJSON          = errors.New("not a valid JSON value")
 )
 
 // IsCannotSetErr reports whether an err is a errCannotSetValue error
