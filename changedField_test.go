@@ -1,9 +1,10 @@
 package mutable
 
 import (
-	"testing"
-	"github.com/stretchr/testify/assert"
 	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestChangedFields_Contains(t *testing.T) {
@@ -34,7 +35,7 @@ func TestChangedFields_Keys(t *testing.T) {
 func TestChangedFields_GetField(t *testing.T) {
 	cf := ChangedFields{
 		"FieldA": &ChangedField{
-			Name: "FieldA",
+			Name:     "FieldA",
 			OldValue: "one",
 			NewValue: "two",
 		},
@@ -43,7 +44,7 @@ func TestChangedFields_GetField(t *testing.T) {
 		},
 	}
 	assert.Equal(t, &ChangedField{
-		Name: "FieldA",
+		Name:     "FieldA",
 		OldValue: "one",
 		NewValue: "two",
 	}, cf.GetField("FieldA"))
@@ -55,7 +56,7 @@ func TestChangedFields_GetField(t *testing.T) {
 func TestChangedFields_JSON(t *testing.T) {
 	cf := ChangedFields{
 		"FieldA": &ChangedField{
-			Name: "FieldA",
+			Name:     "FieldA",
 			OldValue: "one",
 			NewValue: "two",
 		},

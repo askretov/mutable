@@ -303,14 +303,14 @@ func TestMutable_unexportedFields(t *testing.T) {
 	tst := &struct {
 		Mutable
 		FieldA string `json:"field_a"`
-		fieldB string `json:"field_b"`
+		fieldB string
 	}{
 		FieldA: "apple",
 		fieldB: "stone",
 	}
 	tst.ResetMutableState(tst)
 	assert.NoError(t, tst.SetValue("field_a", "banana"))
-	assert.Error(t, tst.SetValue("field_b", "wood"))
+	assert.Error(t, tst.SetValue("fieldB", "wood"))
 	changes := tst.AnalyzeChanges()
 	expectedChanges := ChangedFields{
 		"FieldA": &ChangedField{
