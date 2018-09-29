@@ -7,6 +7,7 @@ import (
 // Status is the Mutable object status type
 type Status int
 
+// Mutable statuses
 const (
 	NotChanged Status = iota
 	Removed
