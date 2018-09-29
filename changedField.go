@@ -6,15 +6,15 @@ import (
 	"github.com/go-ext/logger"
 )
 
-// ChangedFields is a map of ChangedField object pointers with a field name as a key
+// ChangedFields is a map of ChangedField objects with a field name as a key
 type ChangedFields map[string]*ChangedField
 
-// ChangedField is an object with struct field changes data
+// ChangedField contains struct's fields changes data
 type ChangedField struct {
 	Name         string        `json:"-"`                       // Field name
 	OldValue     interface{}   `json:"old_value"`               // Old value
 	NewValue     interface{}   `json:"new_value"`               // New value
-	NestedFields ChangedFields `json:"nested_fields,omitempty"` // Nested changed fields data if field is a struct and has mutable:deep tag value
+	NestedFields ChangedFields `json:"nested_fields,omitempty"` // Nested fields changes data (if a field is a struct and has "mutable:deep" tag value)
 }
 
 // Contains reports whether a field with fieldName exists within c

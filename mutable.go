@@ -9,10 +9,11 @@ import (
 	"github.com/pquerna/ffjson/ffjson"
 )
 
-// LevelSeparator is a value used as a separator of path levels through nested structs (eg. car/engine/gasType)
+// LevelSeparator is a separator of path levels through nested structs (eg. FieldA/NestedStructFieldZ)
 var LevelSeparator = "/"
 
-// Mutable provides a struct's values changes tracking features and dynamic changing of struct's values by field name
+// Mutable provides object changes tracking features and the way to set values to the struct dynamically
+// by a destination field name (including nested structs)
 type Mutable struct {
 	originalState interface{}   // Original state of an object
 	target        interface{}   // Pointer to a target object
@@ -29,8 +30,8 @@ const (
 	mutTagName         = "mutable"
 )
 
-// ResetMutableState resets current mutable status and updates previous state with given currentState
-// of m and all its nested mutable objects
+// ResetMutableState resets current mutable state and updates original state with given self value
+// It also resets all nested mutable objects
 func (m *Mutable) ResetMutableState(self interface{}) error {
 	if reflect.ValueOf(self).Kind() != reflect.Ptr {
 		return errNotPointer
@@ -66,17 +67,10 @@ func (m *Mutable) ResetMutableState(self interface{}) error {
 	return nil
 }
 
-// SetValue sets a value for given field by its name
-// JSON tag value will be used to find an appropriate field by its name as a default source for a name, otherwise
-// a field real name will be used
-// Package var LevelSeparator value used as a separator for nested structs
-// 	(eg. car/engine) for struct like
-//	struct {
-//		Mutable
-//		Car struct {
-//			Engine string
-//		}
-//	}
+// SetValue sets a value for given field by its name.
+// JSON tag value will be used to find an appropriate field as a default source for a name, otherwise
+// a real (as it stated in struct) field name will be used.
+// Package var LevelSeparator value used as a separator for nested structs (eg. car/engine/price)
 func (m *Mutable) SetValue(fieldName string, value interface{}) error {
 	// Try to set a value
 	return trySetValueToObject(reflect.ValueOf(m.target).Elem(), "", fieldName, value)
@@ -156,7 +150,7 @@ func trySetValueToField(field reflect.Value, value interface{}) error {
 	return nil
 }
 
-// parseValue returns a value parsed into destination type dstType
+// parseValue returns a value parsed into destination type dstType.
 // Value should be a valid JSON value
 func parseValue(value []byte, dstType reflect.Type) (interface{}, error) {
 	if json.Valid(value) {
@@ -290,7 +284,7 @@ func analyzeNotValid(fieldName string, current, original reflect.Value) *Changed
 	return nil
 }
 
-// analyzeDeep returns changed fields of deep analyze logic
+// analyzeDeep returns changed fields of deep analyze logic.
 // Deep analyze logic is the analyze of every field changes of underlying struct (used only for struct values)
 func analyzeDeep(current, original reflect.Value) (changedFields ChangedFields) {
 	if !current.CanInterface() {
@@ -309,7 +303,7 @@ func analyzeDeep(current, original reflect.Value) (changedFields ChangedFields) 
 	return changedFields
 }
 
-// analyzeRegular returns changed fields of regular analyze
+// analyzeRegular returns changed fields of regular analyze.
 // Regular analyze logic is the direct comparison of current and original values
 func analyzeRegular(fieldName string, current, original reflect.Value) *ChangedField {
 	if !current.CanInterface() {
