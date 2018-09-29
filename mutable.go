@@ -67,8 +67,9 @@ func (m *Mutable) ResetMutableState(self interface{}) error {
 }
 
 // SetValue sets a value for given field by its name
-// JSON tag value will be used to find an appropriate field by its name
-// package var LevelSeparator value used as a separator for nested structs
+// JSON tag value will be used to find an appropriate field by its name as a default source for a name, otherwise
+// a field real name will be used
+// Package var LevelSeparator value used as a separator for nested structs
 // 	(eg. car/engine) for struct like
 //	struct {
 //		Mutable
@@ -96,7 +97,11 @@ func trySetValueToObject(object reflect.Value, levelPrefix, dstFieldName string,
 			field = object.Field(z).Elem()
 		}
 		// Get current field's json name
-		fieldName, _ := object.Type().Field(z).Tag.Lookup("json")
+		fieldName, tagExists := object.Type().Field(z).Tag.Lookup("json")
+		if !tagExists {
+			// Get a field name from a struct metadata
+			fieldName = object.Type().Field(z).Name
+		}
 		if len(levelPrefix) > 0 {
 			// Prepend a level prefix
 			fieldName = levelPrefix + LevelSeparator + fieldName

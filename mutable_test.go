@@ -65,12 +65,13 @@ func TestMutable_ResetMutableState(t *testing.T) {
 
 func TestMutable_SetValue(t *testing.T) {
 	// Create an object of TestA type
-	var obj = &struct{
+	var obj = &struct {
 		Mutable
-		FieldA string `json:"field_a"`
+		FieldA string  `json:"field_a"`
 		FieldB float64 `json:"field_b"`
 		FieldC []int64 `json:"field_c"`
-		FieldD TestB `json:"field_d"`
+		FieldD TestB   `json:"field_d"`
+		FieldE string
 	}{
 		FieldA: "one",
 		FieldB: 2.0,
@@ -89,19 +90,24 @@ func TestMutable_SetValue(t *testing.T) {
 	assert.Equal(t, float64(2.5), obj.FieldB)
 
 	// Try to set a slice value
-	err = obj.SetValue("field_c", []int64{1,2,3})
+	err = obj.SetValue("field_c", []int64{1, 2, 3})
 	assert.NoError(t, err)
-	assert.Subset(t, []int64{1,2,3}, obj.FieldC)
+	assert.Subset(t, []int64{1, 2, 3}, obj.FieldC)
 
 	// Try to set a slice json value
 	err = obj.SetValue("field_c", "[1,2,3]")
 	assert.NoError(t, err)
-	assert.Subset(t, []int64{1,2,3}, obj.FieldC)
+	assert.Subset(t, []int64{1, 2, 3}, obj.FieldC)
 
 	// Try to set a value for a nested struct
 	err = obj.SetValue("field_d/field_a", "white")
 	assert.NoError(t, err)
 	assert.Equal(t, "white", obj.FieldD.FieldA)
+
+	// Try to set a value by field's real name (has no json tag)
+	err = obj.SetValue("FieldE", "noJSON")
+	assert.NoError(t, err)
+	assert.Equal(t, "noJSON", obj.FieldE)
 
 	// Try to set a value for not existing field
 	err = obj.SetValue("wrong_field", "two")
@@ -271,7 +277,7 @@ func TestMutable_AnalyzeChanges(t *testing.T) {
 }
 
 func TestMutable_ignoredFields(t *testing.T) {
-	tst := &struct{
+	tst := &struct {
 		Mutable
 		FieldA string `json:"field_a"`
 		FieldB string `json:"field_b" mutable:"ignored"`
@@ -294,7 +300,7 @@ func TestMutable_ignoredFields(t *testing.T) {
 }
 
 func TestMutable_unexportedFields(t *testing.T) {
-	tst := &struct{
+	tst := &struct {
 		Mutable
 		FieldA string `json:"field_a"`
 		fieldB string `json:"field_b"`
