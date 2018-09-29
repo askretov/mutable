@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TODO: Check unexported fields in Test structs
-
 type TestA struct {
 	Mutable
 	FieldA string  `json:"field_a"`
@@ -138,7 +136,7 @@ func TestMutable_AnalyzeChanges(t *testing.T) {
 				return tst.AnalyzeChanges()
 			},
 			expected: ChangedFields{
-				"FieldA": ChangedField{
+				"FieldA": &ChangedField{
 					Name:     "FieldA",
 					OldValue: "one",
 					NewValue: "two",
@@ -158,7 +156,7 @@ func TestMutable_AnalyzeChanges(t *testing.T) {
 				return tst.AnalyzeChanges()
 			},
 			expected: ChangedFields{
-				"FieldA": ChangedField{
+				"FieldA": &ChangedField{
 					Name:     "FieldA",
 					OldValue: TestB{FieldA: "apple"},
 					NewValue: TestB{FieldA: "banana"},
@@ -184,12 +182,12 @@ func TestMutable_AnalyzeChanges(t *testing.T) {
 				return tst.AnalyzeChanges()
 			},
 			expected: ChangedFields{
-				"FieldB": ChangedField{
+				"FieldB": &ChangedField{
 					Name:     "FieldB",
 					OldValue: nil,
 					NewValue: TestB{FieldA: "car"},
 				},
-				"FieldC": ChangedField{
+				"FieldC": &ChangedField{
 					Name:     "FieldC",
 					OldValue: TestB{FieldA: "tree"},
 					NewValue: nil,
@@ -219,25 +217,25 @@ func TestMutable_AnalyzeChanges(t *testing.T) {
 				return tst.AnalyzeChanges()
 			},
 			expected: ChangedFields{
-				"FieldA": ChangedField{
+				"FieldA": &ChangedField{
 					Name:     "FieldA",
 					OldValue: TestC{FieldA: "apple"},
 					NewValue: TestC{FieldA: "banana"},
 				},
-				"FieldB": ChangedField{
+				"FieldB": &ChangedField{
 					Name: "FieldB",
 					NestedFields: ChangedFields{
-						"FieldA": ChangedField{
+						"FieldA": &ChangedField{
 							Name:     "FieldA",
 							OldValue: "tree",
 							NewValue: "stone",
 						},
 					},
 				},
-				"FieldD": ChangedField{
+				"FieldD": &ChangedField{
 					Name: "FieldD",
 					NestedFields: ChangedFields{
-						"FieldA": ChangedField{
+						"FieldA": &ChangedField{
 							Name:     "FieldA",
 							OldValue: "dog",
 							NewValue: "cat",
@@ -254,4 +252,50 @@ func TestMutable_AnalyzeChanges(t *testing.T) {
 		assert.Equal(t, tc.expected.String(), result.String(), "Expected: %s\nActual: %s\ntestCase: %s", tc.expected, result, tc.name)
 	}
 
+}
+
+func TestMutable_ignoredFields(t *testing.T) {
+	tst := &struct{
+		Mutable
+		FieldA string `json:"field_a"`
+		FieldB string `json:"field_b" mutable:"ignored"`
+	}{
+		FieldA: "apple",
+		FieldB: "stone",
+	}
+	tst.ResetMutableState(tst)
+	tst.SetValue("field_a", "banana")
+	tst.SetValue("field_b", "wood")
+	changes := tst.AnalyzeChanges()
+	expectedChanges := ChangedFields{
+		"FieldA": &ChangedField{
+			Name:     "FieldA",
+			OldValue: "apple",
+			NewValue: "banana",
+		},
+	}
+	assert.Equal(t, expectedChanges.String(), changes.String(), "Expected: %s\nActual: %s\ntestCase: %s", expectedChanges.String(), changes.String())
+}
+
+func TestMutable_unexportedFields(t *testing.T) {
+	tst := &struct{
+		Mutable
+		FieldA string `json:"field_a"`
+		fieldB string `json:"field_b"`
+	}{
+		FieldA: "apple",
+		fieldB: "stone",
+	}
+	tst.ResetMutableState(tst)
+	assert.NoError(t, tst.SetValue("field_a", "banana"))
+	assert.Error(t, tst.SetValue("field_b", "wood"))
+	changes := tst.AnalyzeChanges()
+	expectedChanges := ChangedFields{
+		"FieldA": &ChangedField{
+			Name:     "FieldA",
+			OldValue: "apple",
+			NewValue: "banana",
+		},
+	}
+	assert.Equal(t, expectedChanges.String(), changes.String(), "Expected: %s\nActual: %s\ntestCase: %s", expectedChanges.String(), changes.String())
 }

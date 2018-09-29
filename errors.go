@@ -15,8 +15,8 @@ var (
 	}
 	errNotPointer       = errors.New("given value is not a Pointer type")
 	errNestedResetError = errors.New("cannot reset nested mutable object")
-	errCannotSet        = errors.New("field cannot Set")
-	errCannotInterface  = errors.New("field cannot Interface")
+	errNotSettable      = errors.New("field is not settable")
+	errNotInterfaceable = errors.New("field is not interfaceable")
 	errCannotParse      = errors.New("cannot parse value")
 	errUnsupportedType  = errors.New("unsupported value type")
 	errNotJSON          = errors.New("not a valid JSON value")

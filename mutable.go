@@ -12,12 +12,6 @@ import (
 // LevelSeparator is a value used as a separator of path levels through nested structs (eg. car/engine/gasType)
 var LevelSeparator = "/"
 
-type Mutabler interface {
-	ResetMutableState(interface{}) error
-	SetValue(string, interface{}) error
-	AnalyzeChanges() ChangedFields
-}
-
 type Mutable struct {
 	// Original state of an object
 	originalState interface{} `json:"-"`
@@ -112,7 +106,7 @@ func trySetValueToObject(object reflect.Value, levelPrefix, dstFieldName string,
 		}
 		if fieldName == dstFieldName {
 			if err := trySetValueToField(field, value); err != nil {
-				logger.Errorf("Error: %s, Field: %s", err, fieldName)
+				logger.Warningf("Error: %s, Field: %s", err, fieldName)
 				return errCannotSetValue(fieldName, value)
 			}
 			return nil
@@ -127,10 +121,10 @@ func trySetValueToObject(object reflect.Value, levelPrefix, dstFieldName string,
 // trySetValueToField sets the value to the given field
 func trySetValueToField(field reflect.Value, value interface{}) error {
 	if !field.CanSet() {
-		return errCannotSet
+		return errNotSettable
 	}
 	if !field.CanInterface() {
-		return errCannotInterface
+		return errNotInterfaceable
 	}
 	var fieldType = reflect.TypeOf(field.Interface())
 	if fieldType == reflect.TypeOf(value) {
@@ -232,8 +226,8 @@ func tryAnalyzeChanges(currentValue, originalValue reflect.Value) (changedFields
 		// Check the field for ignored flag
 		ignored := strings.Contains(tagValue, flagIgnore)
 		// Check ignored fields and Mutable field itself
-		if currentFieldMeta.Type.String() == mutTypeName || ignored { // TODO: test ignored
-			// Pass through for Mutable itself and ignored fields
+		if currentFieldMeta.Type.String() == mutTypeName || ignored {
+			// Pass through Mutable itself and ignored fields
 			continue
 		}
 		// Check whether a field has deep analyze flag
@@ -243,21 +237,21 @@ func tryAnalyzeChanges(currentValue, originalValue reflect.Value) (changedFields
 		switch {
 		case !currentField.IsValid() || !originalField.IsValid():
 			// Current or original field is not valid
-			if cf := analyzeNotValid(currentFieldMeta.Name, currentField, originalField); cf != nil {
-				changedFields[cf.Name] = *cf
+			if changedField := analyzeNotValid(currentFieldMeta.Name, currentField, originalField); changedField != nil {
+				changedFields[changedField.Name] = changedField
 			}
 		case isDeepAnalyze:
 			// Deep analyze case
 			if nestedChangedFields := analyzeDeep(currentField, originalField); len(nestedChangedFields) > 0 {
-				changedFields[currentFieldMeta.Name] = ChangedField{
+				changedFields[currentFieldMeta.Name] = &ChangedField{
 					Name:         currentFieldMeta.Name,
 					NestedFields: nestedChangedFields,
 				}
 			}
 		default:
 			// Regular analyze case (simple value field)
-			if cf := analyzeRegular(currentFieldMeta.Name, currentField, originalField); cf != nil {
-				changedFields[cf.Name] = *cf
+			if changedField := analyzeRegular(currentFieldMeta.Name, currentField, originalField); changedField != nil {
+				changedFields[changedField.Name] = changedField
 			}
 		}
 
@@ -297,6 +291,9 @@ func analyzeNotValid(fieldName string, current, original reflect.Value) *Changed
 // analyzeDeep returns changed fields of deep analyze logic
 // Deep analyze logic is the analyze of every field changes of underlying struct (used only for struct values)
 func analyzeDeep(current, original reflect.Value) (changedFields ChangedFields) {
+	if !current.CanInterface() {
+		return changedFields
+	}
 	// Check whether a nested struct is mutable
 	isNestedStructMutable := isMutable(current)
 	// Analyze nested struct
@@ -313,6 +310,9 @@ func analyzeDeep(current, original reflect.Value) (changedFields ChangedFields) 
 // analyzeRegular returns changed fields of regular analyze
 // Regular analyze logic is the direct comparison of current and original values
 func analyzeRegular(fieldName string, current, original reflect.Value) *ChangedField {
+	if !current.CanInterface() {
+		return nil
+	}
 	var equals bool
 	if _, ok := current.Interface().(Equaler); ok {
 		// Compare with type's Equal method

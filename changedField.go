@@ -6,9 +6,7 @@ import (
 	"github.com/go-ext/logger"
 )
 
-type ChangedFields map[string]ChangedField
-
-// TODO: Migrate to pointers
+type ChangedFields map[string]*ChangedField
 
 type ChangedField struct {
 	Name         string        `json:"-"`
@@ -39,7 +37,7 @@ func (c ChangedFields) Keys() []string {
 }
 
 // GetFieldByName returns ChangedField object by field name
-func (c ChangedFields) GetFieldByName(fieldName string) ChangedField {
+func (c ChangedFields) GetFieldByName(fieldName string) *ChangedField {
 	return c[fieldName]
 }
 
