@@ -1,0 +1,2 @@
+# go-mutable
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/15096842b5a74eb1b44110ee23e9ebe7)](https://app.codacy.com/app/askretov/go-mutable?utm_source=github.com&utm_medium=referral&utm_content=askretov/go-mutable&utm_campaign=Badge_Grade_Dashboard)
