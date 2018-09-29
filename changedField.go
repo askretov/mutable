@@ -17,7 +17,7 @@ type ChangedField struct {
 	NestedFields ChangedFields `json:"nested_fields,omitempty"` // Nested changed fields data if field is a struct and has mutable:deep tag value
 }
 
-// ContainsByFieldName reports whether a field with fieldName exists within c
+// Contains reports whether a field with fieldName exists within c
 func (c ChangedFields) Contains(fieldName string) bool {
 	_, exists := c[fieldName]
 	return exists
@@ -54,7 +54,7 @@ func (c ChangedFields) JSON(pretty bool) []byte {
 	return result
 }
 
-// String implements Stringer interface for c
+// String implements Stringer interface for ChangedFields
 func (c ChangedFields) String() string {
 	return string(c.JSON(true))
 }

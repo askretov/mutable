@@ -4,6 +4,7 @@ import (
 	"strconv"
 )
 
+// Status is the Mutable object status type
 type Status int
 
 const (
