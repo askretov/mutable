@@ -6,23 +6,19 @@ import (
 	"github.com/go-ext/logger"
 )
 
+// ChangedFields is a map of ChangedField object pointers with a field name as a key
 type ChangedFields map[string]*ChangedField
 
+// ChangedField is an object with struct field changes data
 type ChangedField struct {
-	Name         string        `json:"-"`
-	OldValue     interface{}   `json:"old_value"`
-	NewValue     interface{}   `json:"new_value"`
-	NestedFields ChangedFields `json:"nested_fields,omitempty"`
+	Name         string        `json:"-"`                       // Field name
+	OldValue     interface{}   `json:"old_value"`               // Old value
+	NewValue     interface{}   `json:"new_value"`               // New value
+	NestedFields ChangedFields `json:"nested_fields,omitempty"` // Nested changed fields data if field is a struct and has mutable:deep tag value
 }
 
-// Contains reports whether a needle already exists within c
-func (c ChangedFields) Contains(needle *ChangedField) bool {
-	_, exists := c[needle.Name]
-	return exists
-}
-
-// ContainsByFieldName reports whether a data for given field name exists within c
-func (c ChangedFields) ContainsByFieldName(fieldName string) bool {
+// ContainsByFieldName reports whether a field with fieldName exists within c
+func (c ChangedFields) Contains(fieldName string) bool {
 	_, exists := c[fieldName]
 	return exists
 }
@@ -36,8 +32,8 @@ func (c ChangedFields) Keys() []string {
 	return result
 }
 
-// GetFieldByName returns ChangedField object by field name
-func (c ChangedFields) GetFieldByName(fieldName string) *ChangedField {
+// GetField returns ChangedField object by field name
+func (c ChangedFields) GetField(fieldName string) *ChangedField {
 	return c[fieldName]
 }
 
@@ -58,7 +54,7 @@ func (c ChangedFields) JSON(pretty bool) []byte {
 	return result
 }
 
-// String implements Stringer interface
+// String implements Stringer interface for c
 func (c ChangedFields) String() string {
 	return string(c.JSON(true))
 }

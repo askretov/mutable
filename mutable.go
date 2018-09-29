@@ -12,15 +12,12 @@ import (
 // LevelSeparator is a value used as a separator of path levels through nested structs (eg. car/engine/gasType)
 var LevelSeparator = "/"
 
+// Mutable provides a struct's values changes tracking features and dynamic changing of struct's values by field name
 type Mutable struct {
-	// Original state of an object
-	originalState interface{} `json:"-"`
-	// Pointer to a target object
-	target interface{} `json:"-"`
-	// Mutable status of an object
-	MutableStatus Status `json:"-"`
-	// Changed fields data
-	ChangedFields ChangedFields `json:"-"`
+	originalState interface{}   `json:"-"` // Original state of an object
+	target        interface{}   `json:"-"` // Pointer to a target object
+	MutableStatus Status        `json:"-"` // Mutable status of an object
+	ChangedFields ChangedFields `json:"-"` // Changed fields data
 }
 
 const (
