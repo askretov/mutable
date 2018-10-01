@@ -121,3 +121,4 @@ type MyStruct struct {
         FieldZ string
     }
     ```
+2. If you pass a mutable object as an arg to a function, you have to pass it as a pointer to be able to use Mutable features.

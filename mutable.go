@@ -37,13 +37,10 @@ func (m *Mutable) ResetMutableState(self interface{}) error {
 		return errNotPointer
 	}
 	// Set a target
-	if m.target == nil {
-		m.target = self
-	}
+	m.target = self
 	// Update mutable status
 	m.MutableStatus = NotChanged
 	// Reset original state
-	m.originalState = nil
 	m.originalState = reflect.ValueOf(self).Elem().Interface()
 	// Reset changed fields arrays
 	m.ChangedFields = ChangedFields{}
