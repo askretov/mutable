@@ -58,3 +58,8 @@ func (c ChangedFields) JSON(pretty bool) []byte {
 func (c ChangedFields) String() string {
 	return string(c.JSON(true))
 }
+
+// IsEmpty reports does c contain any changes or not
+func (c ChangedFields) IsEmpty() bool {
+	return len(c) == 0
+}
