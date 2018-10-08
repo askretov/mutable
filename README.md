@@ -2,7 +2,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/askretov/go-mutable)](https://goreportcard.com/report/github.com/askretov/go-mutable)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/1c52c7899e544969b1d83896dbc2b9c4)](https://www.codacy.com/app/askretov/go-mutable?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=askretov/mutable&amp;utm_campaign=Badge_Grade)
 [![codecov](https://codecov.io/gh/askretov/mutable/branch/master/graph/badge.svg)](https://codecov.io/gh/askretov/mutable)
-[![Build Status](https://travis-ci.org/askretov/go-mutable.svg?branch=master)](https://travis-ci.org/askretov/go-mutable)
+[![Build Status](https://travis-ci.org/askretov/mutable.svg?branch=master)](https://travis-ci.org/askretov/mutable)
 [![GoDoc](https://godoc.org/github.com/askretov/mutable?status.svg)](https://godoc.org/github.com/askretov/mutable)
 [![Licenses](https://img.shields.io/badge/license-mit-brightgreen.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
