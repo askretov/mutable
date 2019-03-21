@@ -1,4 +1,4 @@
-module mutable
+module github.com/askretov/mutable
 
 require (
 	github.com/askretov/ansi v0.0.0-20150914162238-c286dcecd19f // indirect
