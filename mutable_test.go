@@ -9,12 +9,17 @@ import (
 
 type TestA struct {
 	Mutable
-	FieldA string  `json:"field_a"`
-	FieldB float64 `json:"field_b"`
-	FieldC byte    `json:"field_c"`
-	FieldD TestB   `json:"field_d" mutable:"deep"`
-	FieldE *TestB  `json:"field_e"`
-	FieldF TestC   `json:"field_f" mutable:"deep"`
+	FieldA string            `json:"field_a"`
+	FieldB float64           `json:"field_b"`
+	FieldC byte              `json:"field_c"`
+	FieldD TestB             `json:"field_d" mutable:"deep"`
+	FieldE *TestB            `json:"field_e"`
+	FieldF TestC             `json:"field_f" mutable:"deep"`
+	FieldG []*TestC          `json:"field_g"`
+	FieldH map[string]*TestC `json:"field_h"`
+	FieldI []TestC           `json:"field_i"`
+	FieldJ map[string]TestC  `json:"field_j"`
+	FieldK []int             `json:"field_k"`
 }
 
 type TestB struct {
@@ -37,6 +42,20 @@ func TestMutable_ResetMutableState(t *testing.T) {
 		FieldD: TestB{},
 		FieldE: &TestB{},
 		FieldF: TestC{},
+		FieldG: []*TestC{
+			&TestC{},
+			&TestC{},
+		},
+		FieldH: map[string]*TestC{
+			"one": &TestC{},
+			"two": &TestC{},
+		},
+		FieldI: []TestC{
+			TestC{},
+			TestC{},
+		},
+		FieldJ: map[string]TestC{},
+		FieldK: []int{0, 1},
 	}
 	// Check an arg type checking
 	assert.NoError(t, tst.ResetMutableState(&tst), "pointer")
@@ -61,6 +80,36 @@ func TestMutable_ResetMutableState(t *testing.T) {
 	// Check an original state
 	_, ok = tst.FieldF.originalState.(TestC)
 	assert.True(t, ok, "nested mutable original state object type")
+
+	// Check a target of a nested slice of mutable objects
+	for i := range tst.FieldG {
+		target, ok := tst.FieldG[i].target.(*TestC)
+		assert.True(t, ok, "nested mutable target type")
+		assert.Equal(t, tst.FieldG[i], target, "nested mutable target pointer value")
+		// Check an original state
+		_, ok = tst.FieldG[i].originalState.(TestC)
+		assert.True(t, ok, "nested mutable original state object type")
+	}
+
+	// Check a target of a nested map of mutable objects
+	for key := range tst.FieldH {
+		target, ok := tst.FieldH[key].target.(*TestC)
+		assert.True(t, ok, "nested mutable target type")
+		assert.Equal(t, tst.FieldH[key], target, "nested mutable target pointer value")
+		// Check an original state
+		_, ok = tst.FieldH[key].originalState.(TestC)
+		assert.True(t, ok, "nested mutable original state object type")
+	}
+
+	// Check a target of a nested slice of mutable objects
+	for i := range tst.FieldI {
+		target, ok := tst.FieldI[i].target.(*TestC)
+		assert.True(t, ok, "nested mutable target type")
+		assert.Equal(t, &tst.FieldI[i], target, "nested mutable target pointer value")
+		// Check an original state
+		_, ok = tst.FieldI[i].originalState.(TestC)
+		assert.True(t, ok, "nested mutable original state object type")
+	}
 }
 
 func TestMutable_SetValue(t *testing.T) {

@@ -45,20 +45,60 @@ func (m *Mutable) ResetMutableState(self interface{}) error {
 	// Reset changed fields arrays
 	m.ChangedFields = ChangedFields{}
 	// Reset all nested mutable objects
-	reflectValue := reflect.ValueOf(m.target).Elem()
-	for i := 0; i < reflectValue.NumField(); i++ {
-		field := reflectValue.Field(i)
-		if field.Kind() == reflect.Ptr {
-			field = reflectValue.Field(i).Elem()
-		}
-		if !field.IsValid() || field.Kind() != reflect.Struct {
+	v := reflect.ValueOf(m.target).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
+		if !isMutableType(f.Type()) {
 			continue
 		}
-		if isMutable(field) && field.CanInterface() {
-			if err := field.Addr().Interface().(Mutabler).ResetMutableState(field.Addr().Interface()); err != nil {
+		if f.Kind() == reflect.Ptr {
+			f = v.Field(i).Elem()
+		}
+		switch f.Kind() {
+		case reflect.Slice:
+			if err := resetSliceElements(f); err != nil {
+				return err
+			}
+		case reflect.Map:
+			if err := resetMapElements(f); err != nil {
+				return err
+			}
+		case reflect.Struct:
+			if err := f.Addr().Interface().(Mutabler).ResetMutableState(f.Addr().Interface()); err != nil {
 				logger.Error(err)
 				return errNestedResetError
 			}
+		}
+	}
+	return nil
+}
+
+// resetSliceElements resets mutable state of v slice elements
+func resetSliceElements(v reflect.Value) error {
+	for i := 0; i < v.Len(); i++ {
+		e := v.Index(i)
+		if e.Kind() == reflect.Ptr {
+			e = e.Elem()
+		}
+		if err := e.Addr().Interface().(Mutabler).ResetMutableState(e.Addr().Interface()); err != nil {
+			logger.Error(err)
+			return errNestedResetError
+		}
+	}
+	return nil
+}
+
+// resetMapElements resets mutable state of v map elements
+func resetMapElements(v reflect.Value) error {
+	if elmType := v.Type().Elem(); elmType.Kind() != reflect.Ptr {
+		logger.Warningf("map elements type is not addressable: %s (field type: %s)", elmType, v.Type())
+		return nil
+	}
+	for _, key := range v.MapKeys() {
+		elm := v.MapIndex(key)
+		if err := elm.Interface().(Mutabler).ResetMutableState(elm.Interface()); err != nil {
+			logger.Error(err)
+			return errNestedResetError
 		}
 	}
 	return nil
@@ -75,6 +115,12 @@ func (m *Mutable) SetValue(fieldName string, value interface{}) error {
 
 // AnalyzeChanges analyzes changes of a target object and returns changed fields data
 func (m *Mutable) AnalyzeChanges() ChangedFields {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error(r, m.target, m.originalState)
+		}
+	}()
+	// TODO: Return existing changes if it's not nil (add force param to be able to re-analyze)
 	return tryAnalyzeChanges(reflect.ValueOf(m.target).Elem(), reflect.ValueOf(m.originalState))
 }
 
@@ -133,7 +179,7 @@ func trySetValueToField(field reflect.Value, value interface{}) error {
 			srcValue = value.([]byte)
 		default:
 			// Unsupported type
-			return errUnsupportedType
+			return errUnsupportedType(fieldType, value)
 		}
 		// Try to parse a string value into destination type
 		parsedValue, err := parseValue(srcValue, fieldType)
@@ -162,6 +208,9 @@ func parseValue(value []byte, dstType reflect.Type) (interface{}, error) {
 
 // isMutable reports whether a value is a mutable object
 func isMutable(value reflect.Value) bool {
+	if value.Kind() != reflect.Struct {
+		return false
+	}
 	// Try to get a Mutable field by name
 	mutableField := value.FieldByName(mutFieldName)
 	if mutableField.IsValid() {
@@ -171,6 +220,26 @@ func isMutable(value reflect.Value) bool {
 		}
 	}
 	return false
+}
+
+// isMutableType reports whether a value is a mutable object
+// It analyzes not only t as is but underneath element's type as well (e.g. []*SomeMutableClass)
+func isMutableType(t reflect.Type) bool {
+F:
+	for {
+		// Get Elem of array/slice/map element's type or pointer's underneath value
+		switch t.Kind() {
+		case reflect.Ptr, reflect.Slice, reflect.Array, reflect.Map:
+			t = t.Elem()
+		default:
+			break F
+		}
+	}
+	if t.Kind() != reflect.Struct {
+		return false
+	}
+	_, ok := t.FieldByName(mutFieldName)
+	return ok
 }
 
 // setMutableStatus sets a status for a given value
