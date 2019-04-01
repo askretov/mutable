@@ -316,7 +316,6 @@ func tryAnalyzeChanges(currentValue, originalValue reflect.Value) (changedFields
 				changedFields[changedField.Name] = changedField
 			}
 		}
-
 	}
 	// Set changed fields data to the current object
 	if len(changedFields) > 0 {
