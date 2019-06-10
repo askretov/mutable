@@ -199,7 +199,18 @@ func parseValue(value []byte, dstType reflect.Type) (interface{}, error) {
 	if json.Valid(value) {
 		dstValue := reflect.New(dstType)
 		if err := ffjson.Unmarshal(value, dstValue.Interface()); err != nil {
-			return nil, err
+			// Check for number -> string field error
+			if dstType.Kind() == reflect.String {
+				var v json.Number
+				// Unmarshal to json.Number type
+				if err := json.Unmarshal(value, &v); err != nil {
+					return nil, err
+				} else {
+					return v.String(), nil
+				}
+			} else {
+				return nil, err
+			}
 		}
 		return dstValue.Elem().Interface(), nil
 	}
