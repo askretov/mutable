@@ -166,7 +166,7 @@ func trySetValueToField(field reflect.Value, value interface{}) error {
 		return errNotInterfaceable
 	}
 	var fieldType = reflect.TypeOf(field.Interface())
-	if fieldType == reflect.TypeOf(value) {
+	if fieldType == reflect.TypeOf(value) || field.Kind() == reflect.Interface {
 		// Set a value
 		field.Set(reflect.ValueOf(value))
 	} else {
